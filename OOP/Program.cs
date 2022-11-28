@@ -7,7 +7,10 @@ namespace OOP
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("Hello World!");
+            GameSession session = new GameSession();
+
+            var result = session.Start("A", "B", 12);
+            Console.WriteLine(result);
         }
     }
 
@@ -22,11 +25,9 @@ namespace OOP
             set => _shooted = value;
         }
 
-        private bool _isShip;
         public bool IsShip
         {
-            get => _isShip;
-            set => _isShip = value;
+            get => ship != null;
         }
 
         public Ship ship;
@@ -34,9 +35,6 @@ namespace OOP
 
     public class Ship
     {
-        public int x;
-        public int y;
-
         public int size;
 
         public bool isVertical;
@@ -59,11 +57,17 @@ namespace OOP
 
     public class PlayGround
     {
-        public List<Ship> ships;
+        public List<Ship> ships = new List<Ship>();
 
         public int size;
 
         public Point[,] points;
+
+        public PlayGround(int size)
+        {
+            this.size = size;
+            InitPoints();
+        }
 
         public ShootResult Shoot(int x, int y)
         {
@@ -91,23 +95,31 @@ namespace OOP
 
         public bool AddShip(Ship ship, int x, int y)
         {
-            ship.x = x; 
-            ship.y = y;
-            
             //Отмечаем, что точки принадлежат короблю
             if (ship.isVertical)
             {
-                for (int i = y; i < ship.size; i++)
+                if (ship.size + y > size)
+                    return false;
+
+
+                if (!IsCheckShipRect(x, y, 1, ship.size))
+                    return false;
+
+                for (int i = y; i < y + ship.size; i++)
                 {
-                    points[x, i].IsShip = true;
                     points[x, i].ship = ship;
                 }
             }
             else
             {
-                for (int i = x; i < ship.size; i++)
+                if (ship.size + x > size)
+                    return false;
+
+                if (!IsCheckShipRect(x, y, ship.size, 1))
+                    return false;
+
+                for (int i = x; i < x + ship.size; i++)
                 {
-                    points[i, y].IsShip = true;
                     points[i, y].ship = ship;
                 }
             }
@@ -116,13 +128,68 @@ namespace OOP
             return true;
         }
 
+        public bool IsAllShipsDestroyed()
+        {
+            foreach (var ship in ships)
+            {
+                if (!ship.IsDestruct())
+                    return false;
+            }
+
+            return true;
+        }
+
+        public void InitPoints()
+        {
+            points = new Point[size, size];
+
+            for (int i = 0; i < size; i++)
+            {
+                for (int j = 0; j < size; j++)
+                {
+                    points[i, j] = new Point { X = i, Y = j };
+                }
+            }
+        }
+
+        private bool IsCheckShipRect(int x, int y, int sizeX, int sizeY)
+        {
+            for (int i = x - 1; i < x + sizeX + 1; i++)
+            {
+                for (int j = y - 1; j < y + sizeY + 1; j++)
+                {
+                    if (x > 0 && y > 0 && x < size - sizeX && y < size - sizeY)
+                    {
+                        if (points[i, j].ship != null)
+                            return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
     }
 
     public class Player 
     {
-        public (int, int) GetShootPoint()
+        public string name;
+
+        public PlayGround playgroundShoot;
+
+        public PlayGround playgroundSet;
+
+        public (int, int) TakeShootPoint()
         {
-            return (0, 0);
+            Console.WriteLine($"{name} В какую точку произвести выстрел?");
+            int x = int.Parse(Console.ReadLine());
+            int y = int.Parse(Console.ReadLine());
+            return (x, y);
+        }
+
+        public void ReceiveResult(ShootResult shootResult)
+        {
+            Console.WriteLine($"Результат выстрела {name}: {shootResult}");
         }
     } 
 
@@ -132,49 +199,91 @@ namespace OOP
 
         public Player player2;
 
-        public PlayGround playground1;
+        public Player currentPlayer;
 
-        public PlayGround playground2;
-
-        public bool isPlayer1;
-
-        public void Start()
+        public string Start(string name1, string name2, int size)
         {
-            ArrangementShips(playground1);
-            ArrangementShips(playground2);
+            var playground1 = new PlayGround(size);
+            var playground2 = new PlayGround(size);
+
+            player1 = new Player 
+            { 
+                name = name1,
+                playgroundSet = playground1,
+                playgroundShoot = playground2,
+            };
+
+            player2 = new Player 
+            { 
+                name = name2,
+                playgroundSet = playground2,
+                playgroundShoot = playground1,
+            };
+
+            currentPlayer = player1;
+
+            ArrangementShips(player1.playgroundSet);
+            ArrangementShips(player2.playgroundSet);
 
             while (true)
             {
-                Shoot();
+                var result = Shoot(currentPlayer);
+                if (result != ShootResult.Got && result != ShootResult.Kill)
+                {
+                    if (currentPlayer == player1)
+                        currentPlayer = player2;
+                    else
+                        currentPlayer = player1;
+                }
+                else
+                {
+                    if (currentPlayer.playgroundShoot.IsAllShipsDestroyed())
+                        return currentPlayer.name;
+                }
+
+                currentPlayer.ReceiveResult(result);
             }
         }
 
-        public void Shoot(int x, int y)
+        public ShootResult Shoot(Player player)
         {
-            if (isPlayer1)
-                ShootPlayer(playground2, x, y, false);
-            else
-                ShootPlayer(playground1, x, y, true);
+            var point = player.TakeShootPoint();
+            var result = player.playgroundShoot.Shoot(point.Item1, point.Item2);
+
+            return result;
         }
 
         private void ArrangementShips(PlayGround playGround)
         {
+            Random random = new Random();
+
             for (int i = 0; i < 4; i++)
             {
-                var ship = new Ship
+                for (int j = 0; j < i + 1; j++)
                 {
-                    isVertical = i % 2 == 0 ? true : false,
-                    size = i + 1
-                };
-                playGround.AddShip(ship, i, i + 1);
+                    var ship = new Ship
+                    {
+                        isVertical = (i + j) % 2 == 0,
+                        size = 4 - i
+                    };
+
+                    bool result = false;
+                    do
+                    {
+                        var pointX = random.Next(0, playGround.size);
+                        var pointY = random.Next(0, playGround.size);
+                        result = playGround.AddShip(ship, pointX, pointY);
+                        if (result)
+                            Console.WriteLine($"Корабль {ship.size} x = {pointX} y = {pointY}. Расположение вертикальное = {ship.isVertical}");
+
+                    } while (!result);
+                }
             }
         }
 
-        private void ShootPlayer(PlayGround playground, int x, int y, bool select)
-        {
-            var result = playground.Shoot(x, y);
-            if (result != ShootResult.Got && result != ShootResult.Kill)
-                isPlayer1 = select;
-        }
+        //private void DrawSession(Player player)
+        //{
+        //    var points = player.playgroundS
+        //}
     }
 }
